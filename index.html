@@ -28,7 +28,6 @@
     <button class="tab" role="tab" data-v="bus" aria-selected="false">Buscar aula</button>
     <button class="tab" role="tab" data-v="asi" aria-selected="false">Asistente</button>
     <button class="tab" role="tab" data-v="res" aria-selected="false">Reservas <span class="badge" id="bRes" hidden></span></button>
-    <button class="tab" role="tab" data-v="ind" aria-selected="false" id="tabInd" hidden>Indicadores</button>
     <button class="tab" role="tab" data-v="adm" aria-selected="false" id="tabAdm" hidden>Administrar <span class="badge" id="bAdm" hidden></span></button>
     <span class="live off" id="live"><i></i>Conectando…</span>
   </div>
@@ -151,29 +150,6 @@
   </div>
   <p class="note" id="resNote"></p>
   <div class="tbl" id="resBox"></div>
-</section>
-
-<!-- ================= INDICADORES ================= -->
-<section class="view" id="v-ind" hidden>
-  <div class="vh">
-    <h2>Indicadores</h2>
-    <select id="iRange" aria-label="Rango">
-      <option value="week">Semana del día elegido</option>
-      <option value="month">Mes del día elegido</option>
-      <option value="period">Periodo o receso del día elegido</option>
-      <option value="all">Todo el horizonte (12 meses)</option>
-    </select>
-    <span class="note" id="iRangeTxt"></span>
-  </div>
-  <div class="kpis" id="iKpis"></div>
-  <div class="two">
-    <div class="card"><h3>Ocupación por aula</h3><p class="sub">Promedio de franjas ocupadas o con probabilidad de uso.</p><div class="bars" id="iAula"></div></div>
-    <div class="card"><h3>Ocupación por franja</h3><p class="sub">Qué momentos del día están más llenos.</p><div class="bars" id="iFr"></div></div>
-    <div class="card"><h3>Aulas más pedidas</h3><p class="sub">Fechas reservadas desde esta página en el rango.</p><div class="bars" id="iPed"></div></div>
-    <div class="card"><h3>Reservas por proceso</h3><p class="sub">Quién está usando las aulas.</p><div class="bars" id="iProc"></div></div>
-  </div>
-  <div class="card"><h3>Alertas de cupo</h3><p class="sub">Noches o mañanas en las que la demanda esperada de núcleos supera las aulas híbridas libres.</p><div id="iAlert"></div></div>
-  <div class="card"><h3>Continuidad esperada de los grupos</h3><p class="sub">Si cada grupo del periodo 5 sigue con el siguiente núcleo de su línea, esto es lo que llegaría al periodo 1 de 2027. Es una estimación: confírmala con la programación académica.</p><div class="tbl" id="iCont"></div></div>
 </section>
 
 <!-- ================= ADMINISTRAR ================= -->
@@ -411,7 +387,7 @@ function renderAll(){
   const pend=RES.filter(r=>estadoOf(r)==='solicitada'&&r.fin>=MIN).length;
   const mine=UID?RES.filter(r=>r.by===UID&&estadoOf(r)==='solicitada').length:0;
   $('bRes').hidden=!mine; $('bRes').textContent=mine;
-  computeAccess(); $('tabInd').hidden=!IND; if((VIEW==='ind'&&!IND)||(VIEW==='adm'&&!ADMIN)){VIEW='dia';document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.v==='dia'?'true':'false'));document.querySelectorAll('.view').forEach(s=>{const on=s.id==='v-dia';s.hidden=!on;s.classList.toggle('on',on)})}
+  computeAccess(); if((VIEW==='adm'&&!ADMIN)){VIEW='dia';document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.v==='dia'?'true':'false'));document.querySelectorAll('.view').forEach(s=>{const on=s.id==='v-dia';s.hidden=!on;s.classList.toggle('on',on)})}
   $('tabAdm').hidden=!ADMIN; $('bAdm').hidden=!(ADMIN&&pend); $('bAdm').textContent=pend;
   const lv=$('live');
   if(dbState==='rw'||dbState==='ro'){lv.className='live';lv.innerHTML=`<i></i>En vivo${lastSync?', actualizado '+lastSync.toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'}):''}`}
@@ -420,7 +396,6 @@ function renderAll(){
   if(VIEW==='dia') renderDay();
   else if(VIEW==='sem') renderWeek();
   else if(VIEW==='res') renderList();
-  else if(VIEW==='ind') renderInd();
   else if(VIEW==='adm') renderAdm();
   else if(VIEW==='bus') { if(lastSearch) runSearch(true); }
   else if(VIEW==='asi') renderChat();
@@ -923,44 +898,6 @@ async function exportRes(){
 $('wXls').onclick=exportWeek; $('rXls').onclick=exportRes;
 </script>
 <script>
-/* ================= Indicadores ================= */
-function indRange(){
-  const m=$('iRange').value;
-  if(m==='week'){const a=weekStart(cur);return [a<MIN?MIN:a,addD(a,6)>MAX?MAX:addD(a,6),'Semana del '+fmtS(weekStart(cur))]}
-  if(m==='month'){const[y,mm]=cur.split('-').map(Number);const a=`${y}-${pad(mm)}-01`,b=iso(new Date(y,mm,0));return [clamp(a),clamp(b),cap1(P(a).toLocaleDateString('es-CO',{month:'long',year:'numeric'}))]}
-  if(m==='period'){const p=periodOf(cur);if(p)return [clamp(p.s),clamp(p.e),`Periodo ${p.n} de ${p.y}`];
-    let a=cur,b=cur;while(a>MIN&&!periodOf(addD(a,-1)))a=addD(a,-1);while(b<MAX&&!periodOf(addD(b,1)))b=addD(b,1);return [a,b,'Receso']}
-  return [MIN,MAX,'Doce meses'];
-}
-const barsHTML=(rows,fmt)=>{const mx=Math.max(1,...rows.map(r=>r[1]));return rows.length?rows.map(([l,v])=>`<div class="bar-r"><span>${esc(l)}</span><span class="tr"><i style="width:${(fmt==='%'?v*100:v/mx*100).toFixed(1)}%"></i></span><span>${fmt==='%'?Math.round(v*100)+' %':v}</span></div>`).join(''):'<p class="sub">Sin datos en este rango.</p>'};
-function renderInd(){
-  const [a,b,lab]=indRange(); $('iRangeTxt').textContent=`${lab}: ${fmtM(a)} a ${fmtM(b)}`;
-  const ds=[...days(a,b)];
-  const perRoom={},perFr={};let tot=0,occ=0,freeH=0;
-  ROOMS.forEach(r=>perRoom[r.id]=[0,0]); ALLB.forEach(x=>perFr[x.id]=[0,0]);
-  ds.forEach(s=>blocksFor(dowOf(s)).forEach(bk=>ROOMS.forEach(r=>{const c=evalCell(s,r.id,bk.id),v=occVal(c);tot++;occ+=v;perRoom[r.id][0]+=v;perRoom[r.id][1]++;perFr[bk.id][0]+=v;perFr[bk.id][1]++;if(c.st==='libre')freeH+=bk.hrs})));
-  const live=RES.filter(r=>estadoOf(r)!=='rechazada'&&r.fin>=a&&r.ini<=b);
-  const ped={},proc={};let slots=0;
-  live.forEach(r=>{proc[r.proceso||'Otro']=(proc[r.proceso||'Otro']||0)+1;occList(r.ini<a?a:r.ini,r.fin>b?b:r.fin,r.dias,r.franjas).forEach(s=>r.aulas.forEach(x=>{const n=frForDay(s,r.franjas).length;ped[x]=(ped[x]||0)+n;slots+=n}))});
-  const alerts=ds.flatMap(demandAlert);
-  const pend=live.filter(r=>estadoOf(r)==='solicitada').length;
-  const fest=ds.filter(s=>FEST[s]).length;
-  $('iKpis').innerHTML=[[Math.round(tot?occ/tot*100:0)+' %','ocupación estimada de las aulas'],[Math.round(freeH).toLocaleString('es-CO'),'horas-aula libres para préstamo o eventos'],[live.length,`reservas en el rango (${slots} franjas)`],[pend,'solicitudes pendientes'],[alerts.length,'alertas de cupo'],[fest,'festivos en el rango']].map(([v,t])=>`<div><b>${v}</b><span>${t}</span></div>`).join('');
-  $('iAula').innerHTML=barsHTML(ROOMS.map(r=>[r.num,perRoom[r.id][1]?perRoom[r.id][0]/perRoom[r.id][1]:0]).sort((x,y)=>y[1]-x[1]),'%');
-  $('iFr').innerHTML=barsHTML(ALLB.filter(x=>perFr[x.id][1]).map(x=>[`${x.n} ${BS.includes(x)?'(S y D)':'(L a V)'}`,perFr[x.id][0]/perFr[x.id][1]]),'%');
-  $('iPed').innerHTML=barsHTML(Object.entries(ped).map(([k,v])=>[RNAME[k]?RNAME[k].num:k,v]).sort((x,y)=>y[1]-x[1]));
-  $('iProc').innerHTML=barsHTML(Object.entries(proc).sort((x,y)=>y[1]-x[1]));
-  $('iAlert').innerHTML=alerts.length?'<div class="tbl"><table style="min-width:520px"><thead><tr><th>Fecha</th><th>Franja</th><th>Grupos esperados</th><th>Aulas híbridas libres</th></tr></thead><tbody>'+alerts.map(x=>`<tr><td><button class="lnk" data-go="${x.s}">${fmtD(x.s)}</button></td><td>${x.lab}</td><td>${Math.round(x.dem)}</td><td>${x.free}</td></tr>`).join('')+'</tbody></table></div>':'<p class="sub">No hay alertas en este rango. Aparecen cuando las reservas o bloqueos dejan menos aulas híbridas que los grupos que suelen venir.</p>';
-  $('iAlert').querySelectorAll('[data-go]').forEach(x=>x.onclick=()=>{cur=x.dataset.go;calM=cur.slice(0,7);setView('dia')});
-  // continuidad
-  const fam=n=>{const m=n.match(/^(.*?)\s(\d):/);return m?{f:m[1],l:+m[2]}:null};
-  const names=[...new Set(BASEH.map(h=>h.n))];
-  const rows=HIST26.filter(h=>h.p===5).map(h=>{const fm=fam(h.n);let nx='Sin secuencia conocida';if(fm){const t=names.find(n=>{const x=fam(n);return x&&x.f===fm.f&&x.l===fm.l+1});nx=t||(fm.l>=3?'Termina la línea':'Siguiente nivel sin registro')}
-    return `<tr><td>${h.g}</td><td>${esc(h.n)}</td><td>${h.j==='D'?'Diurna':'Nocturna'}</td><td>${Object.keys(h.rooms).map(d=>DN[d].slice(0,3)).join(', ')}</td><td>${esc(nx)}</td></tr>`});
-  $('iCont').innerHTML='<table><thead><tr><th>Grupo</th><th>Núcleo en el periodo 5</th><th>Jornada</th><th>Días</th><th>Siguiente núcleo probable</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>';
-}
-$('iRange').onchange=renderInd;
-
 /* ================= Administrar ================= */
 let ADMSEC='sol', pastePrev=null;
 document.querySelectorAll('#admNav button').forEach(b=>b.onclick=()=>{ADMSEC=b.dataset.a;renderAdm()});
@@ -1091,16 +1028,16 @@ function admAcc(box){
   const a=CTL.acceso||{}; const ad=Array.isArray(a.admins)?a.admins:[], ind=Array.isArray(a.indicadores)?a.indicadores:[];
   const list=(ids,key)=>ids.length?ids.map(id=>`<div class="res-row"><span data-nm="${esc(id)}">${esc(NAMES[id]||'Cargando…')}</span><button class="btn sm" data-rm="${key}|${esc(id)}">Quitar</button></div>`).join(''):'<p class="sub">Nadie aún.</p>';
   const picker=key=>`<label class="fl">Agregar persona<input class="inp" type="text" id="q-${key}" placeholder="Escribe el nombre o correo" autocomplete="off"></label><div class="acc-hits" id="h-${key}"></div>`;
-  box.innerHTML=`<div class="card"><h3>Quién ve cada sección</h3><p class="sub">Tú, como propietario, siempre ves todo. Las demás personas solo ven Administrar o Indicadores si las agregas aquí. Las pestañas Día, Horario semanal, Buscar aula, Asistente y Reservas siguen abiertas para todos con acceso a la página.</p></div>
+  box.innerHTML=`<div class="card"><h3>Quién ve cada sección</h3><p class="sub">Tú, como propietario, siempre ves todo. Las demás personas solo ven Administrar si las agregas aquí. Las pestañas Día, Horario semanal, Buscar aula, Asistente y Reservas siguen abiertas para todos con acceso a la página.</p></div>
   <div class="two">
-   <div class="card"><h3>Administradores</h3><p class="sub">Aprueban solicitudes, cargan horarios, bloquean aulas y ven Indicadores. Para que puedan guardar cambios, compárteles la página con permiso de <strong>Editor</strong>.</p>${list(ad,'admins')}${picker('admins')}</div>
-   <div class="card"><h3>Solo Indicadores</h3><p class="sub">Ven la pestaña Indicadores, sin poder administrar.</p>${list(ind,'indicadores')}${picker('indicadores')}</div>
+   <div class="card"><h3>Administradores</h3><p class="sub">Aprueban solicitudes, cargan horarios y bloquean aulas. Para que puedan guardar cambios, compárteles la página con permiso de <strong>Editor</strong>.</p>${list(ad,'admins')}${picker('admins')}</div>
+   
   </div><div id="accOut"></div>`;
   const all=[...ad,...ind].filter(x=>!NAMES[x]);
   if(all.length) resolveNames(all).then(()=>box.querySelectorAll('[data-nm]').forEach(s=>{s.textContent=NAMES[s.dataset.nm]||'Persona sin nombre visible'}));
   const save=(key,ids)=>saveCtl('acceso',{admins:key==='admins'?ids:ad,indicadores:key==='indicadores'?ids:ind},'accOut');
   box.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const[k,id]=b.dataset.rm.split('|');save(k,(k==='admins'?ad:ind).filter(x=>x!==id))});
-  ['admins','indicadores'].forEach(key=>{
+  ['admins'].forEach(key=>{
     const inp=$('q-'+key), hits=$('h-'+key);
     const show=async()=>{if(!USER)return;const ps=await USER.search(inp.value.trim());hits.innerHTML='';
       if(!ps.length&&inp.value.trim()){hits.innerHTML='<p class="sub">Sin resultados.</p>';return}
@@ -1229,7 +1166,7 @@ function extensionCurve(o){
   }
   return {base,pasos};
 }
-function toolDisponibilidad(i){
+function toolDispOne(i){
   const o=normArgs(i), rs=roomsFor(o);
   const rows=[], porFecha=[], porAula={}, sinServicio=[];
   rs.forEach(r=>porAula[r.id]={aula:r.num,fechas:0,espacios:0,horas:0});
@@ -1266,6 +1203,18 @@ function toolDisponibilidad(i){
     por_fecha:pf.map(x=>[x.fecha,x.dia,x.aulas,x.espacios,x.lista.join(' '),x.festivo].filter(v=>v!=='')),por_fecha_muestreado:pf.length<porFecha.length,
     por_aula:Object.values(porAula).map(x=>[x.aula,x.fechas,x.espacios,+x.horas.toFixed(1)]),
     nota:'por_fecha = [fecha, día, aulas con espacio, espacios, ids de esas aulas]. En tu respuesta usa los nombres de franja (mañana, tarde, noche), nunca códigos como b2 o s1. por_aula = [aula, fechas con espacio, espacios, horas libres]. La tabla completa y el Excel ya se muestran al usuario debajo de tu respuesta.'};
+}
+function toolDisponibilidad(i){
+  const r1=toolDispOne(i);
+  const o=normArgs(i);
+  if(!o.dur||o.aseo===0) return r1;
+  const r2=toolDispOne({...i,aseo_minutos:0});
+  const k=curResults.indexOf(r2.resultado); if(k>=0) curResults.splice(k,1);
+  RESULTS[r1.resultado].alt=r2.resultado; RESULTS[r1.resultado].modo='con';
+  RESULTS[r2.resultado].alt=r1.resultado; RESULTS[r2.resultado].modo='sin';
+  r1.grupos_sin_aseo=RESULTS[r2.resultado].grupos.total;
+  r1.espacios_sin_aseo=RESULTS[r2.resultado].rows.reduce((a,x)=>a+x.n,0);
+  return r1;
 }
 function toolOcupacion(i){
   const o=normArgs(i); const rs=roomsFor({...o,asis:0,hib:false,pc:false});
@@ -1315,6 +1264,7 @@ Reglas:
 - En periodos de 2027 sin horario cargado, por defecto las franjas con 60 % o más de probabilidad de núcleo cuentan como ocupadas; dilo cuando aplique. Si un aula tiene riesgo menor, menciónalo.
 - Nunca muestres códigos internos de franja (b1, b2, b3, b4, s1, s2): di madrugada, mañana, tarde o noche con su horario.
 - Las tablas quedan plegadas en la página. Tu respuesta debe ser el resumen: cuántos grupos caben en el rango pedido, y las sugerencias_extension (cuántos grupos más caben si se amplía 1, 2, 3… meses). Si el rango da pocos o ningún grupo, di qué ampliación lo resuelve y pregunta cuál prefieren. No repitas tablas.
+- Cada cálculo trae dos variantes: con 15 minutos de aseo (grupos_posibles, espacios) y sin aseo (grupos_sin_aseo, espacios_sin_aseo). Muestra ambas cifras en el resumen.
 - Entre una sesión y la siguiente en el mismo salón hay 15 minutos de aseo (aseo_minutos). Por eso, en una franja de 6:00 a 12:00 caben 2 espacios de 2 horas, no 3, salvo que pidan otro tiempo de aseo.
 - Un grupo tiene una intensidad de 120 horas salvo que digan otra. El edificio está disponible todos los días, así que los recesos sí cuentan como días de clase, salvo que pidan excluirlos (contar_recesos=false). Si preguntan cuántos grupos caben, responde con grupos_posibles y di cuántas sesiones tiene cada grupo y cuánto dura, y también da los espacios como están. Para grupos siempre necesitas duracion_horas (la duración de cada sesión).
 - Si preguntan algo que no es de aulas, redirige amablemente.`;
@@ -1401,12 +1351,22 @@ function dispHTML(R){
   if(UI.has(`det|${id}`)) h+=espaciosHTML(R);
   return h;
 }
-function resultHTML(id){
-  const R=RESULTS[id]; if(!R) return '';
+const RMODE={};
+function resultHTML(id0){
+  const R0=RESULTS[id0]; if(!R0) return '';
+  const R=(RMODE[id0]&&RESULTS[RMODE[id0]])||R0;
   let t='';
-  if(R.tipo==='disp') t=dispHTML(R);
-  else t=`<p class="sub">${esc(R.ptxt)}. ${R.rows.length} franjas ocupadas o en riesgo.</p>`+btnOcu(R);
-  return `<div class="rcard"><div class="rcard-h"><strong>${esc(R.titulo)}</strong><button class="btn sm primary" data-x="${id}">Descargar Excel</button></div>${t}<p class="msg info" id="xm-${id}" hidden></p></div>`;
+  if(R.tipo==='disp'){
+    if(R.alt){
+      const conId=R.modo==='con'?R.id:R.alt, sinId=R.modo==='sin'?R.id:R.alt;
+      const lab=x=>RESULTS[x].params.aseo?`Con ${RESULTS[x].params.aseo} min de aseo`:'Sin aseo';
+      t+=`<div class="btns"><button class="btn sm ${R.id===conId?'primary':''}" data-rm="${id0}|${conId}">${lab(conId)}</button><button class="btn sm ${R.id===sinId?'primary':''}" data-rm="${id0}|${sinId}">${lab(sinId)}</button></div>`;
+    }
+    t+=dispHTML(R);
+  } else {
+    t=`<p class="sub">${esc(R.ptxt)}. ${R.rows.length} franjas ocupadas o en riesgo.</p>`+btnOcu(R);
+  }
+  return `<div class="rcard"><div class="rcard-h"><strong>${esc(R.titulo)}</strong><button class="btn sm primary" data-x="${R.id}">Descargar Excel</button></div>${t}<p class="msg info" id="xm-${R.id}" hidden></p></div>`;
 }
 function btnOcu(R){
   const k='det|'+R.id;
@@ -1443,6 +1403,7 @@ function renderChat(keepScroll){
   box.innerHTML=MSGS.map((m,k)=>m.role==='user'?`<div class="bub u">${esc(m.text).replace(/\n/g,'<br>')}</div>`:
     `<div class="bub a">${m.pending&&!m.text?'<p class="empty">'+esc(m.status||'Pensando…')+'</p>':md(m.text||'')}${m.err?`<p class="msg err">${esc(m.err)}</p>`:''}${(m.results||[]).map(resultHTML).join('')}</div>`).join('');
   box.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>exportResult(b.dataset.x));
+  box.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const[a,c]=b.dataset.rm.split('|');RMODE[a]=c;renderChat(true)});
   box.querySelectorAll('[data-ui]').forEach(b=>b.onclick=()=>{const k=b.dataset.ui;UI.has(k)?UI.delete(k):UI.add(k);renderChat(true)});
   box.querySelectorAll('[data-scb]').forEach(b=>b.onclick=()=>{const[id,mm]=b.dataset.scb.split('|');RSEL[id]=+mm;renderChat(true)});
   box.querySelectorAll('[data-scsel]').forEach(s=>s.onchange=()=>{RSEL[s.dataset.scsel]=+s.value;renderChat(true)});
@@ -1495,58 +1456,47 @@ $('chatNew').onclick=()=>{if(chatBusy&&chatCtl)chatCtl.abort();MSGS.length=0;ren
   if(!btn||!inp) return;
   const ARTURL='https://claude.ai/artifact/WMZMJ2V8WRcQWrfKENP4Yp';
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  let rec=null, on=false, base='';
+  let rec=null, wanted=false, base='';
   const show=(t,link)=>{ if(!msg) return; msg.hidden=!t; msg.innerHTML=t?esc(t)+(link?` <a href="${ARTURL}" target="_blank" rel="noopener">Abrir en otra pestaña para dictar</a>`:''):''; };
-  const paint=()=>{btn.setAttribute('aria-pressed',on?'true':'false');btn.textContent=on?'⏹ Parar':'🎤 Dictar';btn.classList.toggle('warn',on)};
+  const paint=()=>{btn.setAttribute('aria-pressed',wanted?'true':'false');btn.textContent=wanted?'⏹ Parar':'🎤 Dictar';btn.classList.toggle('warn',wanted)};
   if(!SR){
     btn.disabled=true;
     show('Este navegador no tiene reconocimiento de voz. Usa Chrome o Edge, o el dictado de tu sistema (Windows: Win + H; Mac: tecla de dictado).');
     return;
   }
-  const ERR={
-    'not-allowed':'El visor no dejó usar el micrófono.',
-    'service-not-allowed':'El visor no dejó usar el servicio de voz.',
-    'audio-capture':'No encontré un micrófono conectado.',
-    'network':'El servicio de voz no respondió. Revisa tu conexión.',
-    'no-speech':'No escuché nada. Pulsa Dictar y habla de nuevo.',
-    'aborted':''
-  };
-  function newRec(){
+  const ERR={'not-allowed':'El visor no dejó usar el micrófono.','service-not-allowed':'El visor no dejó usar el servicio de voz.','audio-capture':'No encontré un micrófono conectado.','network':'El servicio de voz no respondió. Revisa tu conexión.','no-speech':'','aborted':''};
+  function make(){
     const r=new SR(); r.lang='es-CO'; r.continuous=true; r.interimResults=true;
-    r.onstart=()=>{on=true;show('');paint()};
     r.onresult=e=>{
       let fin='', inter='';
-      for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=t; else inter+=t}
+      for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=t+' '; else inter+=t}
       if(fin) base=(base+' '+fin).replace(/\s+/g,' ').trim();
-      if(fin && /\benviar\.?$/i.test(base)){
-        base=base.replace(/\s*\benviar\.?$/i,'').trim(); inp.value=base;
-        on=false; try{r.stop()}catch(_){} paint();
+      if(fin && /(^|\s)enviar\.?$/i.test(base)){
+        base=base.replace(/(^|\s)enviar\.?$/i,'').trim(); inp.value=base;
+        wanted=false; try{r.stop()}catch(_){} paint();
         if(typeof sendChat==='function') sendChat();
         return;
       }
       inp.value=(base+' '+inter).replace(/\s+/g,' ').trim();
     };
-    r.onend=()=>{on=false;paint()};
-    r.onerror=e=>{on=false;paint(); const m=ERR[e.error]; if(m===undefined) show('No se pudo dictar. Intenta de nuevo.'); else if(m) show(m, e.error==='not-allowed'||e.error==='service-not-allowed')};
+    r.onerror=e=>{
+      const m=ERR[e.error];
+      if(e.error==='not-allowed'||e.error==='service-not-allowed'){ wanted=false; show(ERR[e.error],true); }
+      else if(m===undefined) show('No se pudo dictar. Intenta de nuevo.');
+      else if(m) show(m);
+    };
+    r.onend=()=>{
+      // Chrome corta la escucha tras unos segundos de silencio: si el usuario sigue dictando, se reanuda
+      if(wanted){ try{ rec=make(); rec.start(); return; }catch(_){ wanted=false; } }
+      paint();
+    };
     return r;
   }
-  async function permiso(){
-    const fp=document.featurePolicy;
-    if(fp&&typeof fp.allowsFeature==='function'&&!fp.allowsFeature('microphone')) return 'bloqueado';
-    if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
-      try{const s=await navigator.mediaDevices.getUserMedia({audio:true}); s.getTracks().forEach(t=>t.stop()); return 'ok'}
-      catch(e){ return (e&&(e.name==='NotAllowedError'||e.name==='SecurityError'))?'bloqueado':(e&&e.name==='NotFoundError'?'sin-mic':'ok') }
-    }
-    return 'ok';
-  }
-  btn.onclick=async()=>{
-    if(on){ try{rec&&rec.stop()}catch(_){} return; }
-    show('');
-    const p=await permiso();
-    if(p==='bloqueado'){ show('Este visor no deja usar el micrófono. Abre la página en otra pestaña para dictar, o usa el dictado de tu sistema.',true); return; }
-    if(p==='sin-mic'){ show('No encontré un micrófono conectado.'); return; }
-    base=inp.value.trim(); rec=newRec();
-    try{ rec.start(); }catch(e){ show('No se pudo iniciar el dictado. Pulsa Dictar otra vez.'); }
+  btn.onclick=()=>{
+    if(wanted){ wanted=false; paint(); try{rec&&rec.stop()}catch(_){} return; }
+    show(''); base=inp.value.trim(); wanted=true; paint();
+    try{ rec=make(); rec.start(); }
+    catch(e){ wanted=false; paint(); show('No se pudo iniciar el dictado en este visor.',true); }
   };
 })();
 </script>
